@@ -104,6 +104,18 @@
   #define USER_BTN              PNUM_NOT_DEFINED
 #endif
 
+
+
+// Timer Definitions
+// Use TIM6/TIM7 when possible as servo and tone don't need GPIO output pin
+#ifndef TIMER_TONE
+  #define TIMER_TONE            TIM6
+#endif
+#ifndef TIMER_SERVO
+  #define TIMER_SERVO           TIM16
+#endif
+
+
 // SPI definitions
 #ifndef PIN_SPI_SS
   #define PIN_SPI_SS            PA4
@@ -165,6 +177,7 @@
 #if !defined(HAL_QSPI_MODULE_DISABLED)
   #define HAL_QSPI_MODULE_ENABLED
 #endif
+
 
 /*----------------------------------------------------------------------------
  *        Arduino objects - C++ only

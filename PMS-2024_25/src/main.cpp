@@ -1,22 +1,25 @@
 #include <Arduino.h>
 
 #include <SPI.h>
+#include <PinDefines.h>
+#include "PeripheralPins.c"
+#include <variant_generic.cpp>
+//#include "variant_generic.cpp"
 
-
-#define DEBUG_PIN PB5
-HardwareSerial MySerial(PC4, PC_5);  // TX = PA2, RX = PA3
+HardwareSerial MySerial(3); 
 
 
 void setup() {
-  Serial.begin(115200);
-  delay(500); // Wait for serial connection to be stable
-  Serial.println("STM32: Hello from TX!");
+  MySerial.setTx(DEBUG_MCU_TX_PIN);
+  MySerial.begin(115200);
+  
 }
 
 void loop() {
-  Serial.println("Still running...");
-  delay(1000);
+  MySerial.println("Still running...");
+  
+
+
 }
 
 
-// /Users/emanuelcamarena/Documents/PlatformIO/Projects/PMS-2024_25/src/generic_clock.c
