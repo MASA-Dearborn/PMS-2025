@@ -1,0 +1,29 @@
+{
+  "build": {
+    "core": "stm32",
+    "cpu": "cortex-m4",
+    "extra_flags": "-DSTM32L4 -DSTM32L452xx",
+    "f_cpu": "80000000L",
+    "mcu": "stm32l452ret6",
+    "product_line": "STM32L452xx",
+    "variant": "genericSTM32L452RE"
+  },
+  "connectivity": ["can"],
+  "debug": {
+    "default_tools": ["stlink"],
+    "openocd_target": "stm32l4x",
+    "jlink_device": "STM32L452RETx",
+    "svd_path": "STM32L4x2.svd"
+  },
+  "frameworks": ["arduino", "cmsis", "stm32cube", "libopencm3"],
+  "name": "Custom STM32L452RET6 Board",
+  "upload": {
+    "maximum_ram_size": 163840,
+    "maximum_size": 524288,
+    "protocol": "stlink",
+    "protocols": ["jlink", "cmsis-dap", "stlink", "blackmagic", "mbed"]
+  },
+  "url": "",
+  "vendor": "Custom"
+}
+

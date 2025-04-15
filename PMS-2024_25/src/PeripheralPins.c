@@ -14,9 +14,16 @@
  * Automatically generated from STM32L452RETxP.xml
  * CubeMX DB release 6.0.140
  */
+
+
+
+
 #if !defined(CUSTOM_PERIPHERAL_PINS)
 #include "Arduino.h"
 #include "PeripheralPins.h"
+
+
+
 
 /* =====
  * Notes:
