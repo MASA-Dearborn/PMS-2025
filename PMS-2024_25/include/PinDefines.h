@@ -3,12 +3,16 @@
  * @version 0.1.0
  */
 
+
+
+
  // fix this part
  #include "stm32l452xx.h"
  #include "stm32l4xx_hal.h"
  #include <Arduino.h>
  #pragma once
  
+
  /******************** DEBUGGING ********************/
  
  /* Serial print header using UART9 */
@@ -46,8 +50,9 @@
              /**** SPI Sensor ****/
  
 /* Temperature Sensor */
-#define Temp_SPI_SCLK                   PC10
-#define Temp_SPI_MISO                   PC11
+#define Temp_SPI_SCLK                   PC_10
+#define Temp_SPI_MISO                   PC_11
+#define Temp_SPI_MOSI                   PC_12
 // MISO is Master In Slave Out, its how the sensor sends data
 
              /**** CAN Transceiver ****/
