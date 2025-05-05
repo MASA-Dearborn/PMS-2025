@@ -1,5 +1,6 @@
+#include <PinDefines.h>
+#include "generic_clock.c"
 #include <Arduino.h>
-
 #include <SPI.h>
 #include <PinDefines.h>
 #include "PeripheralPins.c"
@@ -40,6 +41,7 @@ void setup() {
   MySerial.println(F("MAX6675 OK"));
   
 }
+
 
 void loop() {
   MySerial.println("Still running...");
