@@ -1,5 +1,4 @@
 #include <PinDefines.h>
-#include "generic_clock.c"
 #include <Arduino.h>
 #include <SPI.h>
 #include <PinDefines.h>
