@@ -19,7 +19,7 @@
 
 
 #if !defined(CUSTOM_PERIPHERAL_PINS)
-//#include "Arduino.h"
+#include "Arduino.h"
 #include "PeripheralPins.h"
 
 

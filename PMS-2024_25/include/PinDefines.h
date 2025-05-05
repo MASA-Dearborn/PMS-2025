@@ -48,6 +48,7 @@
 /* Temperature Sensor */
 #define Temp_SPI_SCLK                   PC10
 #define Temp_SPI_MISO                   PC11
+#define Temp_SPI_MOSI                   PC12
 // MISO is Master In Slave Out, its how the sensor sends data
 
              /**** CAN Transceiver ****/
