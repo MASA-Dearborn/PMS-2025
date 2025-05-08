@@ -268,3 +268,36 @@ int32_t MAX31855::readRawData(void)
 
   return rawData;
 }
+
+
+// self added function to get en error message 
+
+void MAX31855::getError(void)
+{
+  while (detectThermocouple() != MAX31855_THERMOCOUPLE_OK)
+  {
+    switch (detectThermocouple())
+    {
+      case MAX31855_THERMOCOUPLE_SHORT_TO_VCC:
+        MySerial.println(F("Thermocouple short to VCC"));
+        break;
+
+      case MAX31855_THERMOCOUPLE_SHORT_TO_GND:
+        MySerial.println(F("Thermocouple short to GND"));
+        break;
+
+      case MAX31855_THERMOCOUPLE_NOT_CONNECTED:
+        MySerial.println(F("Thermocouple not connected"));
+        break;
+
+      case MAX31855_THERMOCOUPLE_UNKNOWN:
+        MySerial.println(F("Thermocouple unknown error"));
+        break;
+
+      case MAX31855_THERMOCOUPLE_READ_FAIL:
+        MySerial.println(F("Thermocouple read error, check chip & spi cable"));
+        break;
+    }
+    delay(5000);
+  }
+}

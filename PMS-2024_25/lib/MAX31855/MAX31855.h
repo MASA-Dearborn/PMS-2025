@@ -93,6 +93,8 @@ class MAX31855
            uint16_t getChipID(int32_t rawValue = MAX31855_FORCE_READ_DATA);
            float    getTemperature(int32_t rawValue = MAX31855_FORCE_READ_DATA);
            float    getColdJunctionTemperature(int32_t rawValue = MAX31855_FORCE_READ_DATA);
+           void     getError(void);
+
    virtual int32_t  readRawData(void);
  
   private:
