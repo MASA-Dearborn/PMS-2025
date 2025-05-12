@@ -51,6 +51,7 @@ class bq769x0 {
     int begin(byte alertPin, byte bootPin = -1);
     int checkStatus();  // returns 0 if everything is OK
 	void update(void);
+    void updateVoltages(void);
 	void shutdown(void);
 
     // charging control
@@ -147,7 +148,6 @@ class bq769x0 {
     // Methods
     bool determineAddressAndCrc(void);
 	static void alertISR(void);
-	void updateVoltages(void);
 	void updateCurrent(bool ignoreCCReadyFlag = false);
 	void updateTemperatures(void);
     byte updateBalancingSwitches(void);
