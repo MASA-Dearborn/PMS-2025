@@ -145,6 +145,7 @@ class STM32_CAN {
     STM32_CAN(CAN_TypeDef* canPort, CAN_PINS pins, RXQUEUE_TABLE rxSize = RX_SIZE_16, TXQUEUE_TABLE txSize = TX_SIZE_16);
     // Begin. By default the automatic retransmission is enabled. If it causes problems, use begin(false) to disable it.
     void begin(bool retransmission = false);
+    void disableAllFilters();
     void setBaudRate(uint32_t baud);
     bool write(CAN_message_t &CAN_tx_msg, bool sendMB = false);
     bool read(CAN_message_t &CAN_rx_msg);

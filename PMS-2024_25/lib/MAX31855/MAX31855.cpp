@@ -105,7 +105,9 @@ void MAX31855::begin(void)
 /**************************************************************************/
 uint8_t MAX31855::detectThermocouple(int32_t rawValue)
 {
+  MySerial.println("Still running not...");
   if (rawValue == MAX31855_FORCE_READ_DATA) rawValue = readRawData();
+  MySerial.println("read raw value");
 
   if (rawValue == 0)                    return MAX31855_THERMOCOUPLE_READ_FAIL;
 
@@ -116,6 +118,7 @@ uint8_t MAX31855::detectThermocouple(int32_t rawValue)
     else if (bitRead(rawValue, 0) == 1) return MAX31855_THERMOCOUPLE_NOT_CONNECTED;
     else                                return MAX31855_THERMOCOUPLE_UNKNOWN;
   }
+  MySerial.println("returning a message");
   return MAX31855_THERMOCOUPLE_OK;
 }
 
@@ -240,15 +243,26 @@ float MAX31855::getColdJunctionTemperature(int32_t rawValue)
 /**************************************************************************/
 int32_t MAX31855::readRawData(void)
 {
+  MySerial.println("1");
+
   int32_t rawData = 0;
+  MySerial.println("2");
 
   digitalWrite(_cs, LOW);                                          //stop  measurement/conversion
+  MySerial.println("3");
+
   delayMicroseconds(1);                                            //pulse fall time > 100nS
+  MySerial.println("4");
+
   digitalWrite(_cs, HIGH);                                         //start measurement/conversion
+  MySerial.println("5");
 
-  delay(MAX31855_CONVERSION_TIME);
 
-  
+  //delay(MAX31855_CONVERSION_TIME);
+  delay(100);
+
+  MySerial.println("transaction start");
+
   _spi->beginTransaction(SPISettings(1000000, MSBFIRST, SPI_MODE0)); //up to 5MHz, read MSB first, SPI mode 0, see note
   
 
@@ -256,9 +270,10 @@ int32_t MAX31855::readRawData(void)
 
   for (uint8_t i = 0; i < 2; i++)                                  //read 32-bits via hardware SPI, in order MSB->LSB (D31..D0 bit)
   {
-   
+    MySerial.println("transfer start");
     rawData = (rawData << 16) | _spi->transfer16(0x0000);            //chip has read only SPI & MOSI not connected, so it doesn't metter what to send
-    
+    MySerial.println("transfer end");
+
 
   }
 
@@ -274,6 +289,7 @@ int32_t MAX31855::readRawData(void)
 
 void MAX31855::getError(void)
 {
+  MySerial.println("in error func");
   while (detectThermocouple() != MAX31855_THERMOCOUPLE_OK)
   {
     switch (detectThermocouple())
@@ -298,6 +314,7 @@ void MAX31855::getError(void)
         MySerial.println(F("Thermocouple read error, check chip & spi cable"));
         break;
     }
+    MySerial.println("no error");
     delay(5000);
   }
 }

@@ -1,4 +1,5 @@
 #include "CAN_Functions.h"
+#include "stm32l4xx.h"   // or your MCU specific header
 #include <PinDefines.h>
 #include <SerialConfig.h>
 
@@ -31,7 +32,6 @@ void CANL4::begin() {
     CAN_outMsg_2.len = 8;
     CAN_outMsg_2.buf[0] =  0x03;
     CAN_outMsg_2.buf[1] =  0x41;
-    CAN_outMsg_2.buf[2] =  0x11;
     CAN_outMsg_2.buf[3] =  0x21;
     CAN_outMsg_2.buf[4] =  0x00;
     CAN_outMsg_2.buf[5] =  0x00;
@@ -97,3 +97,8 @@ void CANL4::readCanMessage() {
     }
     
 }
+
+
+
+
+

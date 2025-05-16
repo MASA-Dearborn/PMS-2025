@@ -1,4 +1,7 @@
 #include "STM32_CAN.h"
+#include "stm32l4xx.h"   // or your MCU specific header
+#include <SerialConfig.h>
+
 
 constexpr Baudrate_entry_t STM32_CAN::BAUD_RATE_TABLE_48M[];
 constexpr Baudrate_entry_t STM32_CAN::BAUD_RATE_TABLE_45M[];
@@ -46,6 +49,60 @@ STM32_CAN::STM32_CAN( CAN_TypeDef* canPort, CAN_PINS pins, RXQUEUE_TABLE rxSize,
   _pins = pins;
 }
 
+
+void Arduino_GPIO_Init(GPIO_TypeDef* GPIOx, uint32_t pin, uint32_t mode, uint32_t pull, uint32_t speed, uint32_t alternate)
+{
+    // Enable GPIO clock
+    if (GPIOx == GPIOA) __HAL_RCC_GPIOA_CLK_ENABLE();
+    else if (GPIOx == GPIOB) __HAL_RCC_GPIOB_CLK_ENABLE();
+    else if (GPIOx == GPIOC) __HAL_RCC_GPIOC_CLK_ENABLE();
+    else if (GPIOx == GPIOD) __HAL_RCC_GPIOD_CLK_ENABLE();
+    else if (GPIOx == GPIOE) __HAL_RCC_GPIOE_CLK_ENABLE();
+   
+
+    // Check pin validity (only 1 bit should be set)
+    if (pin == 0 || (pin & (pin - 1))) {
+        MySerial.println("ERROR: Invalid pin mask in Arduino_GPIO_Init!");
+        return;
+    }
+
+    uint32_t position = POSITION_VAL(pin);   // Safe STM32 macro
+
+    MySerial.print("Configuring GPIO pin: ");
+    MySerial.println(position);
+
+    // Set mode
+    MODIFY_REG(GPIOx->MODER, (0x3 << (position * 2)), (mode << (position * 2)));
+
+    // Set output type
+    if (mode == GPIO_MODE_OUTPUT_PP || mode == GPIO_MODE_AF_PP)
+        CLEAR_BIT(GPIOx->OTYPER, (1 << position));   // Push-pull
+    else if (mode == GPIO_MODE_OUTPUT_OD || mode == GPIO_MODE_AF_OD)
+        SET_BIT(GPIOx->OTYPER, (1 << position));     // Open-drain
+
+    // Set speed
+    MODIFY_REG(GPIOx->OSPEEDR, (0x3 << (position * 2)), (speed << (position * 2)));
+
+    // Set pull-up/down
+    MODIFY_REG(GPIOx->PUPDR, (0x3 << (position * 2)), (pull << (position * 2)));
+
+    // Set alternate function if needed
+    if (mode == GPIO_MODE_AF_PP || mode == GPIO_MODE_AF_OD)
+    {
+        if (position < 8)
+            MODIFY_REG(GPIOx->AFR[0], (0xF << (position * 4)), (alternate << (position * 4)));
+        else
+            MODIFY_REG(GPIOx->AFR[1], (0xF << ((position - 8) * 4)), (alternate << ((position - 8) * 4)));
+
+        MySerial.print("AF set for pin: ");
+        MySerial.print(position);
+        MySerial.print(" AF number: ");
+        MySerial.println(alternate);
+    }
+}
+
+
+
 // Init and start CAN
 void STM32_CAN::begin( bool retransmission ) {
 
@@ -58,199 +115,46 @@ void STM32_CAN::begin( bool retransmission ) {
 
   initializeBuffers();
 
+  MySerial.println("in can begin");
+
   // Configure CAN
+
   if (_canPort == CAN1)
   {
-    //CAN1
     __HAL_RCC_CAN1_CLK_ENABLE();
+    __HAL_RCC_SYSCFG_CLK_ENABLE();   // Add this; sometimes needed on STM32L4
+
+    MySerial.println("Enabling CAN1...");
 
     if (_pins == ALT)
     {
-      __HAL_RCC_GPIOB_CLK_ENABLE();
-      #if defined(__HAL_RCC_AFIO_CLK_ENABLE)  // Some MCUs like F1xx uses AFIO to set pins, so if there is AFIO defined, we use that.
-      __HAL_AFIO_REMAP_CAN1_2();  // To use PB8/9 pins for CAN1.
-      __HAL_RCC_AFIO_CLK_ENABLE();
-      GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;  // If AFIO is used, there doesn't seem to be "very high" option for speed, so we use "high" -setting.
-      GPIO_InitStruct.Pin = GPIO_PIN_8;
-      GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-      HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
-      GPIO_InitStruct.Pin = GPIO_PIN_9;
-      #else  // Without AFIO, this is the way to set the pins for CAN.
-      #if defined(GPIO_AF8_CAN1)  // Depending on the MCU used, this can be AF8, AF4 or AF9
-      GPIO_InitStruct.Alternate = GPIO_AF8_CAN1;
-      #elif defined(GPIO_AF4_CAN)
-      GPIO_InitStruct.Alternate = GPIO_AF4_CAN;
-      #else
-      GPIO_InitStruct.Alternate = GPIO_AF9_CAN1;
-      #endif
-      GPIO_InitStruct.Pin = GPIO_PIN_8|GPIO_PIN_9;
-      #if defined(GPIO_SPEED_FREQ_VERY_HIGH)
-      GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
-      #else
-      GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
-      #endif
-      #endif
-      GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
-      HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+        MySerial.println("Using CAN1 ALT pins (PB12/PB13, AF10)");
+        // PB12 = CAN1_RX, PB13 = CAN1_TX
+        Arduino_GPIO_Init(GPIOB, GPIO_PIN_12, GPIO_MODE_AF_PP, GPIO_NOPULL, GPIO_SPEED_FREQ_VERY_HIGH, GPIO_AF10_CAN1);
+        Arduino_GPIO_Init(GPIOB, GPIO_PIN_13, GPIO_MODE_AF_PP, GPIO_NOPULL, GPIO_SPEED_FREQ_VERY_HIGH, GPIO_AF10_CAN1);
     }
-    if (_pins == DEF)
+    else if (_pins == DEF)
     {
-      __HAL_RCC_GPIOA_CLK_ENABLE();
-      GPIO_InitStruct.Pull = GPIO_NOPULL;
-      #if defined(__HAL_RCC_AFIO_CLK_ENABLE)
-      __HAL_AFIO_REMAP_CAN1_1(); // To use PA11/12 pins for CAN1.
-      __HAL_RCC_AFIO_CLK_ENABLE();
-      GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
-      GPIO_InitStruct.Pin = GPIO_PIN_11;
-      GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-      HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
-      GPIO_InitStruct.Pin = GPIO_PIN_12;
-      #else
-      #if defined(GPIO_AF4_CAN)
-      GPIO_InitStruct.Alternate = GPIO_AF4_CAN;
-      #else
-      GPIO_InitStruct.Alternate = GPIO_AF9_CAN1;
-      #endif
-      GPIO_InitStruct.Pin = GPIO_PIN_11|GPIO_PIN_12;
-      #if defined(GPIO_SPEED_FREQ_VERY_HIGH)
-      GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
-      #else
-      GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
-      #endif
-      #endif
-      GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
-      HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+        MySerial.println("Using CAN1 DEF pins (PA11/PA12, AF9)");
+        // PA11 = CAN1_RX, PA12 = CAN1_TX
+        Arduino_GPIO_Init(GPIOA, GPIO_PIN_11, GPIO_MODE_AF_PP, GPIO_NOPULL, GPIO_SPEED_FREQ_VERY_HIGH, GPIO_AF9_CAN1);
+        Arduino_GPIO_Init(GPIOA, GPIO_PIN_12, GPIO_MODE_AF_PP, GPIO_NOPULL, GPIO_SPEED_FREQ_VERY_HIGH, GPIO_AF9_CAN1);
     }
-
-    #if defined(__HAL_RCC_GPIOD_CLK_ENABLE) // not all MCU variants have port GPIOD available
-    if (_pins == ALT_2)
-    {
-      __HAL_RCC_GPIOD_CLK_ENABLE();
-      GPIO_InitStruct.Pull = GPIO_NOPULL;
-      #if defined(__HAL_RCC_AFIO_CLK_ENABLE)
-      __HAL_AFIO_REMAP_CAN1_3(); // To use PD0/1 pins for CAN1.
-      __HAL_RCC_AFIO_CLK_ENABLE();
-      GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
-      GPIO_InitStruct.Pin = GPIO_PIN_0;
-      GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-      HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);
-      GPIO_InitStruct.Pin = GPIO_PIN_1;
-      #else
-      #if defined(GPIO_AF4_CAN)
-      GPIO_InitStruct.Alternate = GPIO_AF4_CAN;
-      #else
-      GPIO_InitStruct.Alternate = GPIO_AF9_CAN1;
-      #endif
-      GPIO_InitStruct.Pin = GPIO_PIN_0|GPIO_PIN_1;
-      #if defined(GPIO_SPEED_FREQ_VERY_HIGH)
-      GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
-      #else
-      GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
-      #endif
-      #endif
-      GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
-      HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);
-    }
-    #endif
-
-    // NVIC configuration for CAN1 Reception complete interrupt
-    HAL_NVIC_SetPriority(CAN1_RX0_IRQn, 15, 0); // 15 is lowest possible priority
-    HAL_NVIC_EnableIRQ(CAN1_RX0_IRQn );
-    // NVIC configuration for CAN1 Transmission complete interrupt
-    HAL_NVIC_SetPriority(CAN1_TX_IRQn, 15, 0); // 15 is lowest possible priority
-    HAL_NVIC_EnableIRQ(CAN1_TX_IRQn);
 
     n_pCanHandle->Instance = CAN1;
+
+    HAL_NVIC_SetPriority(CAN1_RX0_IRQn, 15, 0);
+    HAL_NVIC_EnableIRQ(CAN1_RX0_IRQn);
+    HAL_NVIC_SetPriority(CAN1_TX_IRQn, 15, 0);
+    HAL_NVIC_EnableIRQ(CAN1_TX_IRQn);
+
+    MySerial.println("CAN1 initialized.");
   }
-#ifdef CAN2
-  else if (_canPort == CAN2)
-  {
-    //CAN2
-    __HAL_RCC_CAN1_CLK_ENABLE(); // CAN1 clock needs to be enabled too, because CAN2 works as CAN1 slave.
-    __HAL_RCC_CAN2_CLK_ENABLE();
-    if (_pins == ALT)
-    {
-      __HAL_RCC_GPIOB_CLK_ENABLE();
-      #if defined(__HAL_RCC_AFIO_CLK_ENABLE)
-      __HAL_AFIO_REMAP_CAN2_ENABLE(); // To use PB5/6 pins for CAN2. Don't ask me why this has different name than for CAN1.
-      __HAL_RCC_AFIO_CLK_ENABLE();
-      GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
-      GPIO_InitStruct.Pin = GPIO_PIN_5;
-      GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-      HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
-      GPIO_InitStruct.Pin = GPIO_PIN_6;
-      #else
-      GPIO_InitStruct.Alternate = GPIO_AF9_CAN2;
-      GPIO_InitStruct.Pin = GPIO_PIN_5|GPIO_PIN_6;
-      GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
-      #endif
-      GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
-      HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
-    }
-    if (_pins == DEF) {
-      __HAL_RCC_GPIOB_CLK_ENABLE();
-      #if defined(__HAL_RCC_AFIO_CLK_ENABLE)
-      __HAL_AFIO_REMAP_CAN2_DISABLE(); // To use PB12/13 pins for CAN2.
-      __HAL_RCC_AFIO_CLK_ENABLE();
-      GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
-      GPIO_InitStruct.Pin = GPIO_PIN_12;
-      GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-      HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
-      GPIO_InitStruct.Pin = GPIO_PIN_13;
-      #else
-      GPIO_InitStruct.Alternate = GPIO_AF9_CAN2;
-      GPIO_InitStruct.Pin = GPIO_PIN_12|GPIO_PIN_13;
-      GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
-      #endif
-      GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
-      HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
-    }
 
-    // NVIC configuration for CAN2 Reception complete interrupt
-    HAL_NVIC_SetPriority(CAN2_RX0_IRQn, 15, 0); // 15 is lowest possible priority
-    HAL_NVIC_EnableIRQ(CAN2_RX0_IRQn );
-    // NVIC configuration for CAN2 Transmission complete interrupt
-    HAL_NVIC_SetPriority(CAN2_TX_IRQn, 15, 0); // 15 is lowest possible priority
-    HAL_NVIC_EnableIRQ(CAN2_TX_IRQn);
+  MySerial.println("finished pin functionality");
 
-    n_pCanHandle->Instance = CAN2;
-  }
-#endif
 
-#ifdef CAN3
-  else if (_canPort == CAN3)
-  {
-    //CAN3
-    __HAL_RCC_CAN3_CLK_ENABLE();
-    if (_pins == ALT)
-    {
-      __HAL_RCC_GPIOB_CLK_ENABLE();
-      GPIO_InitStruct.Alternate = GPIO_AF11_CAN3;
-      GPIO_InitStruct.Pin = GPIO_PIN_3|GPIO_PIN_4;
-      GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
-      GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
-      HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
-    }
-    if (_pins == DEF)
-    {
-      __HAL_RCC_GPIOA_CLK_ENABLE();
-      GPIO_InitStruct.Alternate = GPIO_AF11_CAN3;
-      GPIO_InitStruct.Pin = GPIO_PIN_8|GPIO_PIN_15;
-      GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
-      GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
-      HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
-    }
 
-    // NVIC configuration for CAN3 Reception complete interrupt
-    HAL_NVIC_SetPriority(CAN3_RX0_IRQn, 15, 0); // 15 is lowest possible priority
-    HAL_NVIC_EnableIRQ(CAN3_RX0_IRQn );
-    // NVIC configuration for CAN3 Transmission complete interrupt
-    HAL_NVIC_SetPriority(CAN3_TX_IRQn, 15, 0); // 15 is lowest possible priority
-    HAL_NVIC_EnableIRQ(CAN3_TX_IRQn);
-
-    n_pCanHandle->Instance = CAN3;
-  }
-#endif
 
   n_pCanHandle->Init.TimeTriggeredMode = DISABLE;
   n_pCanHandle->Init.AutoBusOff = DISABLE;
@@ -260,6 +164,12 @@ void STM32_CAN::begin( bool retransmission ) {
   n_pCanHandle->Init.ReceiveFifoLocked  = DISABLE;
   n_pCanHandle->Init.TransmitFifoPriority = ENABLE;
   n_pCanHandle->Init.Mode = CAN_MODE_NORMAL;
+}
+
+void STM32_CAN::disableAllFilters() {
+  for (uint8_t mb = 0; mb < 16; mb++) {
+      setMBFilterProcessing(static_cast<CAN_BANK>(mb), 0x000, 0x00000000);
+  }
 }
 
 void STM32_CAN::setBaudRate(uint32_t baud)

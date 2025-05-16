@@ -1,5 +1,5 @@
 /**
- * @brief PIN defines for the STM32H7
+ * @brief PIN defines for the STM32L4
  * @version 0.1.0
  */
 
@@ -57,8 +57,8 @@
 
              /**** CAN Transceiver ****/
 
-#define CAN_TX                          PB12
-#define CAN_RX                          PB13
+#define CAN_RX                          PB12
+#define CAN_TX                          PB13
 
  
 
