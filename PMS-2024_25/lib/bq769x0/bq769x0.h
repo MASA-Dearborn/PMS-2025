@@ -22,6 +22,7 @@
 
 #include <Arduino.h>
 #include <Wire.h>
+#include <SerialConfig.h>
 
 // can be reduced to save some memory if smaller ICs are used
 #define MAX_NUMBER_OF_CELLS 15
@@ -47,11 +48,13 @@ class bq769x0 {
   public:
   
     // initialization, status update and shutdown
-    bq769x0(byte bqType = bq76920, int bqI2CAddress = 0x18);
+    bq769x0(byte bqType = bq76920, int bqI2CAddress = 0x08);
     int begin(byte alertPin, byte bootPin = -1);
     int checkStatus();  // returns 0 if everything is OK
 	void update(void);
     void updateVoltages(void);
+    void updateVoltagesMine(void);    
+    int readCellVoltage(uint8_t hiAddr, uint8_t loAddr);
 	void shutdown(void);
 
     // charging control
