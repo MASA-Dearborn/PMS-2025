@@ -867,20 +867,20 @@ void bq769x0::updateVoltagesMine()
   MySerial.print("VC4: "); MySerial.print(vc4); MySerial.println(" mV");
   MySerial.print("VC5: "); MySerial.print(vc5); MySerial.println(" mV");
 
-  int cell1 = vc1;
-  int cell2 = vc1 - vc2;
-  int cell3 = cell2 + vc3;
-  int cell5 = cell3 + vc5;
+  // int cell1 = vc1;
+  // int cell2 = vc1 - vc2;
+  // int cell3 = cell2 + vc3;
+  // int cell5 = cell3 + vc5;
 
-  MySerial.print("cellpin1: "); MySerial.print(cell1); MySerial.println(" mV");
-  MySerial.print("cellpin2: "); MySerial.print(cell2); MySerial.println(" mV");
-  MySerial.print("cellpin3: "); MySerial.print(cell3); MySerial.println(" mV");
-  MySerial.print("cellpin5: "); MySerial.print(cell5); MySerial.println(" mV");
+  // MySerial.print("cellpin1: "); MySerial.print(cell1); MySerial.println(" mV");
+  // MySerial.print("cellpin2: "); MySerial.print(cell2); MySerial.println(" mV");
+  // MySerial.print("cellpin3: "); MySerial.print(cell3); MySerial.println(" mV");
+  // MySerial.print("cellpin5: "); MySerial.print(cell5); MySerial.println(" mV");
 
-  cellVoltages[0] = cell1 - cell2;
-  cellVoltages[1] = cell2;
-  cellVoltages[2] = cell3 - cell1;
-  cellVoltages[3] = cell5 - cell3;
+  cellVoltages[0] = vc1;
+  cellVoltages[1] = vc2;
+  cellVoltages[2] = vc3;
+  cellVoltages[3] = vc5;
   
   // if(false) {
   //   for (int i = 0; i < numberOfCells; i++) {
@@ -930,7 +930,7 @@ int bq769x0::readCellVoltage(uint8_t hiAddr, uint8_t loAddr) {
     byte lo = Wire.read();
 
     int adcVal = ((hi & 0b00111111) << 8) | lo;
-    return adcVal * adcGain / 1000 + adcOffset;  // Convert to millivolts
+    return (adcVal * adcGain / 1000 ) + adcOffset;  // Convert to millivolts
   } else {
     return -1;  // Indicate failure
   }
