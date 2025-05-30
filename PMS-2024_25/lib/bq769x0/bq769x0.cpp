@@ -107,13 +107,15 @@ int bq769x0::begin(byte alertPin, byte bootPin)
   // Boot IC if pin is defined (else: manual boot via push button has to be done before calling this method)
   if (bootPin >= 0)
   {
-    // pinMode(bootPin, OUTPUT);
-    // digitalWrite(bootPin, HIGH);
+    pinMode(bootPin, OUTPUT);
+    digitalWrite(bootPin, HIGH);
     delay(5);   // wait 5 ms for device to receive boot signal (datasheet: max. 2 ms)
     // pinMode(bootPin, INPUT);     // don't disturb temperature measurement
     delay(10);  // wait for device to boot up completely (datasheet: max. 10 ms)
   }
- 
+  
+  delay(2000);
+
   if (determineAddressAndCrc())
   {
     LOG_PRINTLN("Address and CRC detection successful");
@@ -159,6 +161,7 @@ bool bq769x0::determineAddressAndCrc(void)
   LOG_PRINTLN("Determining i2c address and whether CRC is enabled");
   MySerial.println("Determining i2c address and whether CRC is enabled");
 
+  delay(500);
   // check for each address and CRC combination while also set CC_CFG to 0x19 as per datasheet
   I2CAddress = 0x08;
   crcEnabled = false;
@@ -804,6 +807,7 @@ void bq769x0::updateVoltages()
   batVoltage = 4 * adcGain * adcValPack / 1000 + (connectedCells * adcOffset); // in original LibreSolar, connectedCells is converted to byte, maybe to reduce bit size
 }
 
+// remade update voltage function with some changes for testing
 void bq769x0::updateVoltagesMine()
 {
 
@@ -914,12 +918,14 @@ void bq769x0::updateVoltagesMine()
   batVoltage = 4 * adcGain * adcValPack / 1000 + (connectedCells * adcOffset); // in original LibreSolar, connectedCells is converted to byte, maybe to reduce bit size
 }
 
+// reads individual cell voltage using auto-incriment between hi and lo and returns final
+// calculated voltage in millivolts
 int bq769x0::readCellVoltage(uint8_t hiAddr, uint8_t loAddr) {
   
   Wire.beginTransmission(I2CAddress);
   Wire.write(hiAddr);          // Set register pointer to HI byte
   Wire.endTransmission(false); // Send restart condition
-  delay(1);
+  delay(100);
   uint8_t received = Wire.requestFrom(I2CAddress, 2);   // Request HI and LO bytes
   MySerial.print("Requested 2 bytes, got: ");
   MySerial.println(received);
