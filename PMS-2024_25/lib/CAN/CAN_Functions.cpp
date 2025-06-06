@@ -1,72 +1,78 @@
 #include "CAN_Functions.h"
+#include "stm32l4xx.h"   // or your MCU specific header
 #include <PinDefines.h>
 #include <SerialConfig.h>
+
+CAN_message_t CANL4::CAN_outMsg_9;
+CAN_message_t CANL4::CAN_outMsg_10;
 
 CANL4::CANL4(STM32_CAN* can)
   : _can(can), Counter(0)
 {
 }
 
+//Raw value to CAN message
+void CANL4::encodeToBuffer(CAN_message_t &msg, uint32_t startBit, uint8_t length, float factor, float offset, float value)
+{
+    int32_t raw = round((value - offset) / factor);
+ 
+    for (uint8_t i = 0; i < length; i++) {
+        uint8_t byteIndex = (startBit + i) / 8;
+        uint8_t bitIndex = (startBit + i) % 8;
+ 
+        if (raw & (1L << i)) {
+            msg.buf[byteIndex] |= (1 << bitIndex);
+        } else {
+            msg.buf[byteIndex] &= ~(1 << bitIndex);
+        }
+    }
+}
+
+
 void CANL4::begin() {
     _can->begin();
     _can->setBaudRate(500000);
-    _can->setMBFilterProcessing(MB0, 0x153, 0x1FFFFFFF);
-    _can->setMBFilterProcessing(MB1, 0x613, 0x1FFFFFFF);
-    _can->setMBFilterProcessing(MB2, 0x615, 0x1FFFFFFF, STD);
-    _can->setMBFilterProcessing(MB3, 0x1F0, 0x1FFFFFFF, EXT);
 
     // We set the data that is static for the three different message structs once here.
-    CAN_outMsg_1.id = (0x1A5);
-    CAN_outMsg_1.len = 8;
-    CAN_outMsg_1.buf[0] =  0x03;
-    CAN_outMsg_1.buf[1] =  0x41;
-    CAN_outMsg_1.buf[2] =  0x11;
-    CAN_outMsg_1.buf[3] =  0x00;
-    CAN_outMsg_1.buf[4] =  0x00;
-    CAN_outMsg_1.buf[5] =  0x00;
-    CAN_outMsg_1.buf[6] =  0x00;
-    CAN_outMsg_1.buf[7] =  0x00;
-  
-    CAN_outMsg_2.id = (0x7E8);
-    CAN_outMsg_2.len = 8;
-    CAN_outMsg_2.buf[0] =  0x03;
-    CAN_outMsg_2.buf[1] =  0x41;
-    CAN_outMsg_2.buf[2] =  0x11;
-    CAN_outMsg_2.buf[3] =  0x21;
-    CAN_outMsg_2.buf[4] =  0x00;
-    CAN_outMsg_2.buf[5] =  0x00;
-    CAN_outMsg_2.buf[6] =  0x00;
-    CAN_outMsg_2.buf[7] =  0xFF;
-  
-    CAN_outMsg_3.id = (0xA63);
-    CAN_outMsg_3.len = 8;
-    CAN_outMsg_3.buf[0] =  0x63;
-    CAN_outMsg_3.buf[1] =  0x49;
-    CAN_outMsg_3.buf[2] =  0x11;
-    CAN_outMsg_3.buf[3] =  0x22;
-    CAN_outMsg_3.buf[4] =  0x00;
-    CAN_outMsg_3.buf[5] =  0x00;
-    CAN_outMsg_3.buf[6] =  0x00;
-    CAN_outMsg_3.buf[7] =  0x00;
+    // Current + Temp (0x109)
+    CAN_outMsg_9.id = 0x109;
+    CAN_outMsg_9.len = 8;
+    memset(CAN_outMsg_9.buf, 0, 8);
+
+    // Voltage + Humidity  (0x10A)
+    CAN_outMsg_10.id = 0x10A;
+    CAN_outMsg_10.len = 8;
+    memset(CAN_outMsg_10.buf, 0, 8);
 }
 
 void CANL4::sendData() {
     if (Counter >= 255){ Counter = 0;}
+
+    
   
-  // Only the counter value is updated to the 3 messages sent out.
-  CAN_outMsg_1.buf[3] =  Counter; 
-  _can->write(CAN_outMsg_1);
+  // === Current + Temperature (ID 0x301) === //Good
+  memset(CAN_outMsg_9.buf, 0, 8);
+  // encodeToBuffer(CAN_outMsg_9, 0, 12, 0.001, 0, payCurrent);
+  // encodeToBuffer(CAN_outMsg_9, 12, 16, 0.001, 0, rpiCurrent);
+  encodeToBuffer(CAN_outMsg_9, 28, 16, 1, -27, tempThermo);
+  // CAN_outMsg_9.id = 0x301; wrong IDs most likely
+  _can->write(CAN_outMsg_9);
 
-  CAN_outMsg_2.buf[5] =  Counter;
-  _can->write(CAN_outMsg_2);
+  // === Voltage + Humidity (ID 0x302) ===
+  memset(CAN_outMsg_10.buf, 0, 8);
+  encodeToBuffer(CAN_outMsg_10, 0, 12, 0.01, 0, cell1Voltage);
+  encodeToBuffer(CAN_outMsg_10, 12, 12, 0.01, 0, cell2Voltage);
+  encodeToBuffer(CAN_outMsg_10, 24, 12, 0.01, 0, cell3Voltage);
+  encodeToBuffer(CAN_outMsg_10, 36, 12, 0.01, 0, cell4Voltage);
+  // encodeToBuffer(CAN_outMsg_10, 48, 16, 0.01, 0, Humidity);
+  // CAN_outMsg_10.id = 0x302; wrong IDs most likely
+  _can->write(CAN_outMsg_10);
 
-  CAN_outMsg_3.buf[6] =  Counter;
-  _can->write(CAN_outMsg_3);
+  // === COUNTER TEST (optional debug) ===
+  // MySerial.print("Sent Frame Set. Counter: ");
+  // MySerial.println(Counter, HEX);
 
-  MySerial.print("Sent: ");
-  MySerial.println(Counter, HEX);
   Counter++;
-  delay(100);
 }
 
 void CANL4::readCanMessage() {
@@ -97,3 +103,4 @@ void CANL4::readCanMessage() {
     }
     
 }
+

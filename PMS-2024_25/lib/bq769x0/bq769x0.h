@@ -36,8 +36,8 @@
 // output information to serial console for debugging
 // #define BQ769X0_DEBUG 1
 #ifdef BQ769X0_DEBUG
-    #define LOG_PRINT(x)    Serial.print(x)
-    #define LOG_PRINTLN(x)  Serial.println(x)
+    #define LOG_PRINT(x)    MySerial.print(x)
+    #define LOG_PRINTLN(x)  MySerial.println(x)
 #else
     #define LOG_PRINT(x)
     #define LOG_PRINTLN(x)
@@ -156,6 +156,7 @@ class bq769x0 {
     byte updateBalancingSwitches(void);
 	int readRegister(byte address);
 	void writeRegister(byte address, int data);
+    
 };
 
 #endif // BQ769X0_H

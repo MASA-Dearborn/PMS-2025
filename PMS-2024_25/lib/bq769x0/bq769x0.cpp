@@ -108,13 +108,16 @@ int bq769x0::begin(byte alertPin, byte bootPin)
   if (bootPin >= 0)
   {
     pinMode(bootPin, OUTPUT);
-    digitalWrite(bootPin, HIGH);
+    digitalWrite(bootPin, LOW);
     delay(5);   // wait 5 ms for device to receive boot signal (datasheet: max. 2 ms)
-    // pinMode(bootPin, INPUT);     // don't disturb temperature measurement
+    digitalWrite(bootPin,HIGH);
+    delay(10);   // wait 5 ms for device to receive boot signal (datasheet: max. 2 ms)
+    digitalWrite(bootPin,LOW);
     delay(10);  // wait for device to boot up completely (datasheet: max. 10 ms)
   }
   
-  delay(2000);
+
+  delay(5000);           // wait 5 seconds for next scan
 
   if (determineAddressAndCrc())
   {
@@ -130,13 +133,13 @@ int bq769x0::begin(byte alertPin, byte bootPin)
     MySerial.println(crcEnabled);
 
     // initial settings for bq769x0
-    writeRegister(SYS_CTRL1, B00011000);  // switch external thermistor (TEMP_SEL) and ADC on (ADC_EN)
+    writeRegister(SYS_CTRL1, B00001000);  // switch external thermistor (TEMP_SEL) and ADC on (ADC_EN) // turned off themristor
     writeRegister(SYS_CTRL2, B01000000);  // switch CC_EN on
     delay(20);
 
     // attach ALERT interrupt to this instance
-    instancePointer = this;
-    attachInterrupt(digitalPinToInterrupt(alertPin), bq769x0::alertISR, RISING);
+    // instancePointer = this;
+    // attachInterrupt(digitalPinToInterrupt(alertPin), bq769x0::alertISR, RISING);
 
     // get ADC offset and gain
     adcOffset = (signed int) readRegister(ADCOFFSET);  // convert from 2's complement
@@ -161,7 +164,9 @@ bool bq769x0::determineAddressAndCrc(void)
   LOG_PRINTLN("Determining i2c address and whether CRC is enabled");
   MySerial.println("Determining i2c address and whether CRC is enabled");
 
-  delay(500);
+  delay(1000);
+  writeRegister(0x00, 0x92);
+
   // check for each address and CRC combination while also set CC_CFG to 0x19 as per datasheet
   I2CAddress = 0x08;
   crcEnabled = false;
@@ -430,6 +435,7 @@ byte bq769x0::updateBalancingSwitches(void)
     
     balancingActive = false;
   }
+  return numberOfSections;
 }
 
 void bq769x0::setShuntResistorValue(int res_mOhm)
@@ -500,6 +506,7 @@ long bq769x0::setShortCircuitProtection(long current_mA, int delay_us)
 long bq769x0::setOvercurrentChargeProtection(long current_mA, int delay_ms)
 {
   // ToDo: Software protection for charge overcurrent
+  return current_mA;
 }
 
 //----------------------------------------------------------------------------
@@ -807,116 +814,118 @@ void bq769x0::updateVoltages()
   batVoltage = 4 * adcGain * adcValPack / 1000 + (connectedCells * adcOffset); // in original LibreSolar, connectedCells is converted to byte, maybe to reduce bit size
 }
 
-// remade update voltage function with some changes for testing
-void bq769x0::updateVoltagesMine()
-{
+// // remade update voltage function with some changes for testing
+// void bq769x0::updateVoltagesMine()
+// {
+// 
+//   LOG_PRINTLN("updateVoltages");
+//   MySerial.println("updateVoltages");
+//   long adcVal = 0;
+//   byte buf[10];
+//   int connectedCells = 0;
+//   idCellMaxVoltage = 0; //resets to zero before writing values to these vars
+//   idCellMinVoltage = 0;
+// 
+//   // uint8_t crc;
+//   // crc = 0;
+//   // buf[0] = VC1_HI_BYTE; // start with the first cell
+//   
+//   // Wire.beginTransmission(I2CAddress);
+//   // Wire.write(buf[0]);     // tell slave that this is the address it is interested in
+//   // Wire.endTransmission(); // end transmission so that read can begin
+// 
+//   /****************************************************\
+//     Note that each cell voltage is 14 bits stored across two 8 bit register locations in the BQ769x0 chip.
+//     This means that first we need to read register HI (in first instance this is VC1_HI_BYTE), 
+//     however this 8 bit piece of data has two worthless first digits - garbage.
+//     To remove the first two bits, the bitwise & is used. By saying A & 00111111, only the last 6 bits of A are used. 
+//     Meanwhile all of the 8 bits on the low side are used. So the overall reading is the last 6 bits of high in front of the 8 bits from low.
+//     To add the hi and lo readings together, the << is used to shift the hi value over by 8 bits, then adding it to the 8 bits.
+//     This is done by using the OR operator |. So the total thing looks like: adcVal = (VC_HI_BYTE & 0b00111111) << 8 | VC_LO_BYTE;
+//   \****************************************************/
+// 
+//   // Wire.beginTransmission(I2CAddress);
+//   // Wire.write(VC1_HI_BYTE);
+//   // Wire.endTransmission(false);
+//   // delay(1);
+//   // Wire.requestFrom(I2CAddress, 10);
+// 
+//   // for (int i = 0; i < 10; i++) {
+//   //   buf[i] = Wire.read();
+//   // }
+// 
+//   // int vc1 = ((buf[0] & 0b00111111) << 8) | buf[1];
+//   // int vc2 = ((buf[2] & 0b00111111) << 8) | buf[3];
+//   // int vc3 = ((buf[4] & 0b00111111) << 8) | buf[5];
+//   // int vc4 = ((buf[6] & 0b00111111) << 8) | buf[7];
+//   // int vc5 = ((buf[8] & 0b00111111) << 8) | buf[9];
+//   // vc1 *= adcGain / 1000 + adcOffset;
+//   // vc2 *= adcGain / 1000 + adcOffset;
+//   // vc3 *= adcGain / 1000 + adcOffset;
+//   // vc4 *= adcGain / 1000 + adcOffset;
+//   // vc5 *= adcGain / 1000 + adcOffset;
+// 
+//   // will run once for each cell up to the total num of cells
+//   int vc1 = readCellVoltage(VC1_HI_BYTE, VC1_LO_BYTE);
+//   int vc2 = readCellVoltage(VC2_HI_BYTE, VC2_LO_BYTE);
+//   int vc3 = readCellVoltage(VC3_HI_BYTE, VC3_LO_BYTE);
+//   int vc4 = readCellVoltage(VC4_HI_BYTE, VC4_LO_BYTE);
+//   int vc5 = readCellVoltage(VC5_HI_BYTE, VC5_LO_BYTE);
+// 
+//   MySerial.print("VC1: "); MySerial.print(vc1); MySerial.println(" mV");
+//   MySerial.print("VC2: "); MySerial.print(vc2); MySerial.println(" mV");
+//   MySerial.print("VC3: "); MySerial.print(vc3); MySerial.println(" mV");
+//   MySerial.print("VC4: "); MySerial.print(vc4); MySerial.println(" mV");
+//   MySerial.print("VC5: "); MySerial.print(vc5); MySerial.println(" mV");
+// 
+//   // int cell1 = vc1;
+//   // int cell2 = vc1 - vc2;
+//   // int cell3 = cell2 + vc3;
+//   // int cell5 = cell3 + vc5;
+// 
+//   // MySerial.print("cellpin1: "); MySerial.print(cell1); MySerial.println(" mV");
+//   // MySerial.print("cellpin2: "); MySerial.print(cell2); MySerial.println(" mV");
+//   // MySerial.print("cellpin3: "); MySerial.print(cell3); MySerial.println(" mV");
+//   // MySerial.print("cellpin5: "); MySerial.print(cell5); MySerial.println(" mV");
+// 
+//   cellVoltages[0] = vc1;
+//   cellVoltages[1] = vc2;
+//   cellVoltages[2] = vc3;
+//   cellVoltages[3] = vc5;
+//   
+//   // if(false) {
+//   //   for (int i = 0; i < numberOfCells; i++) {
+// 
+//   //     // if CRC is disabled only read 2 bytes and call it a day :)
+//   //     // MySerial.println("CRC is DISABLED!!")
+//   //     Wire.requestFrom(I2CAddress, 2);
+//   //     buf[0] = Wire.read(); // VCx_HI - note that only bottom 6 bits are good
+//   //     buf[2] = Wire.read(); // VCx_LO - all 8 bits are used
+// 
+//   //     // combine VCx_HI and VCx_LO bits and calculate cell voltage
+//   //     adcVal = (buf[0] & 0b00111111) << 8 | buf[2];           // read VCx_HI bits and drop the first two bits, shift left then append VCx_LO bits
+//   //     cellVoltages[i] = adcVal * adcGain / 1000 + adcOffset;  // calculate real voltage in mV
+//     
+//   //     // filter out voltage readings from unconnected cell(s)
+//   //     if (cellVoltages[i] > 500) {  
+//   //       connectedCells++; // add one to the temporary cell counter var - only readings above 500mV are counted towards real cell count
+//   //     }
+// 
+//   //     if (cellVoltages[i] > cellVoltages[idCellMaxVoltage]) {
+//   //       idCellMaxVoltage = i;
+//   //     }
+// 
+//   //     if (cellVoltages[i] < cellVoltages[idCellMinVoltage] && cellVoltages[i] > 500) {
+//   //       idCellMinVoltage = i;
+//   //     }
+//   //   }
+//   // }
+//   connectedCells = 3;
+//   long adcValPack = ((readRegister(BAT_HI_BYTE) << 8) | readRegister(BAT_LO_BYTE)) & 0b1111111111111111;
+//   batVoltage = 4 * adcGain * adcValPack / 1000 + (connectedCells * adcOffset); // in original LibreSolar, connectedCells is converted to byte, maybe to reduce bit size
+// }
 
-  LOG_PRINTLN("updateVoltages");
-  MySerial.println("updateVoltages");
-  long adcVal = 0;
-  byte buf[10];
-  int connectedCells = 0;
-  idCellMaxVoltage = 0; //resets to zero before writing values to these vars
-  idCellMinVoltage = 0;
 
-  // uint8_t crc;
-  // crc = 0;
-  // buf[0] = VC1_HI_BYTE; // start with the first cell
-  
-  // Wire.beginTransmission(I2CAddress);
-  // Wire.write(buf[0]);     // tell slave that this is the address it is interested in
-  // Wire.endTransmission(); // end transmission so that read can begin
-
-  /****************************************************\
-    Note that each cell voltage is 14 bits stored across two 8 bit register locations in the BQ769x0 chip.
-    This means that first we need to read register HI (in first instance this is VC1_HI_BYTE), 
-    however this 8 bit piece of data has two worthless first digits - garbage.
-    To remove the first two bits, the bitwise & is used. By saying A & 00111111, only the last 6 bits of A are used. 
-    Meanwhile all of the 8 bits on the low side are used. So the overall reading is the last 6 bits of high in front of the 8 bits from low.
-    To add the hi and lo readings together, the << is used to shift the hi value over by 8 bits, then adding it to the 8 bits.
-    This is done by using the OR operator |. So the total thing looks like: adcVal = (VC_HI_BYTE & 0b00111111) << 8 | VC_LO_BYTE;
-  \****************************************************/
-
-  // Wire.beginTransmission(I2CAddress);
-  // Wire.write(VC1_HI_BYTE);
-  // Wire.endTransmission(false);
-  // delay(1);
-  // Wire.requestFrom(I2CAddress, 10);
-
-  // for (int i = 0; i < 10; i++) {
-  //   buf[i] = Wire.read();
-  // }
-
-  // int vc1 = ((buf[0] & 0b00111111) << 8) | buf[1];
-  // int vc2 = ((buf[2] & 0b00111111) << 8) | buf[3];
-  // int vc3 = ((buf[4] & 0b00111111) << 8) | buf[5];
-  // int vc4 = ((buf[6] & 0b00111111) << 8) | buf[7];
-  // int vc5 = ((buf[8] & 0b00111111) << 8) | buf[9];
-  // vc1 *= adcGain / 1000 + adcOffset;
-  // vc2 *= adcGain / 1000 + adcOffset;
-  // vc3 *= adcGain / 1000 + adcOffset;
-  // vc4 *= adcGain / 1000 + adcOffset;
-  // vc5 *= adcGain / 1000 + adcOffset;
-
-  // will run once for each cell up to the total num of cells
-  int vc1 = readCellVoltage(VC1_HI_BYTE, VC1_LO_BYTE);
-  int vc2 = readCellVoltage(VC2_HI_BYTE, VC2_LO_BYTE);
-  int vc3 = readCellVoltage(VC3_HI_BYTE, VC3_LO_BYTE);
-  int vc4 = readCellVoltage(VC4_HI_BYTE, VC4_LO_BYTE);
-  int vc5 = readCellVoltage(VC5_HI_BYTE, VC5_LO_BYTE);
-
-  MySerial.print("VC1: "); MySerial.print(vc1); MySerial.println(" mV");
-  MySerial.print("VC2: "); MySerial.print(vc2); MySerial.println(" mV");
-  MySerial.print("VC3: "); MySerial.print(vc3); MySerial.println(" mV");
-  MySerial.print("VC4: "); MySerial.print(vc4); MySerial.println(" mV");
-  MySerial.print("VC5: "); MySerial.print(vc5); MySerial.println(" mV");
-
-  // int cell1 = vc1;
-  // int cell2 = vc1 - vc2;
-  // int cell3 = cell2 + vc3;
-  // int cell5 = cell3 + vc5;
-
-  // MySerial.print("cellpin1: "); MySerial.print(cell1); MySerial.println(" mV");
-  // MySerial.print("cellpin2: "); MySerial.print(cell2); MySerial.println(" mV");
-  // MySerial.print("cellpin3: "); MySerial.print(cell3); MySerial.println(" mV");
-  // MySerial.print("cellpin5: "); MySerial.print(cell5); MySerial.println(" mV");
-
-  cellVoltages[0] = vc1;
-  cellVoltages[1] = vc2;
-  cellVoltages[2] = vc3;
-  cellVoltages[3] = vc5;
-  
-  // if(false) {
-  //   for (int i = 0; i < numberOfCells; i++) {
-
-  //     // if CRC is disabled only read 2 bytes and call it a day :)
-  //     // MySerial.println("CRC is DISABLED!!");
-  //     Wire.requestFrom(I2CAddress, 2);
-  //     buf[0] = Wire.read(); // VCx_HI - note that only bottom 6 bits are good
-  //     buf[2] = Wire.read(); // VCx_LO - all 8 bits are used
-
-  //     // combine VCx_HI and VCx_LO bits and calculate cell voltage
-  //     adcVal = (buf[0] & 0b00111111) << 8 | buf[2];           // read VCx_HI bits and drop the first two bits, shift left then append VCx_LO bits
-  //     cellVoltages[i] = adcVal * adcGain / 1000 + adcOffset;  // calculate real voltage in mV
-    
-  //     // filter out voltage readings from unconnected cell(s)
-  //     if (cellVoltages[i] > 500) {  
-  //       connectedCells++; // add one to the temporary cell counter var - only readings above 500mV are counted towards real cell count
-  //     }
-
-  //     if (cellVoltages[i] > cellVoltages[idCellMaxVoltage]) {
-  //       idCellMaxVoltage = i;
-  //     }
-
-  //     if (cellVoltages[i] < cellVoltages[idCellMinVoltage] && cellVoltages[i] > 500) {
-  //       idCellMinVoltage = i;
-  //     }
-  //   }
-  // }
-  connectedCells = 3;
-  long adcValPack = ((readRegister(BAT_HI_BYTE) << 8) | readRegister(BAT_LO_BYTE)) & 0b1111111111111111;
-  batVoltage = 4 * adcGain * adcValPack / 1000 + (connectedCells * adcOffset); // in original LibreSolar, connectedCells is converted to byte, maybe to reduce bit size
-}
 
 // reads individual cell voltage using auto-incriment between hi and lo and returns final
 // calculated voltage in millivolts

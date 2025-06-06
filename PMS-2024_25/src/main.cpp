@@ -16,6 +16,7 @@
 HardwareSerial MySerial(3); 
 SPIClass SPI_3(Temp_SPI_MOSI, Temp_SPI_MISO, Temp_SPI_SCLK); 
 
+
 // This will use CAN1 of our MCU PB12/13 pins and set RX-buffer size to 64-messages. TX-buffer size is kept at default 16.
 STM32_CAN Can( CAN1, ALT, RX_SIZE_64, TX_SIZE_16 );
 CANL4 myCAN(&Can);
@@ -24,9 +25,44 @@ CANL4 myCAN(&Can);
 int32_t rawData = 0;
 MAX31855 myMAX31855(Temp_Chip_Select, &SPI_3);
 
-bq769x0 myBQ76920(bq76920);
+bq769x0 myBQ76920(bq76920, 0x08);
 
 ACS37002 myACS37002(Current_Sense_Vout, Current_Sense_Vref, 3.3, 0.040);
+
+
+// CAN updates 
+
+void updateCANMessages(float temp, float cell1, float cell2, float cell3, float cell4)
+{
+  // myCAN.payCurrent = current;
+  // myCAN.rpiCurrent = rpicurrent;
+  myCAN.tempThermo = temp;
+  myCAN.cell1Voltage = cell1;
+  myCAN.cell2Voltage = cell2;
+  myCAN.cell3Voltage = cell3;
+  myCAN.cell4Voltage = cell4;
+}
+
+void printUpdatedCAN()
+{
+  // MySerial.println("Payload Current:");
+  // MySerial.println(myCAN.payCurrent);
+  // MySerial.println("RPI Current:");
+  // MySerial.println(myCAN.rpiCurrent);
+  MySerial.println("Temp:");
+  MySerial.println(myCAN.tempThermo);
+  MySerial.println("Cell 1:");
+  MySerial.println(myCAN.cell1Voltage);
+  MySerial.println("Cell 2:");
+  MySerial.println(myCAN.cell2Voltage);
+  MySerial.println("Cell 3:");
+  MySerial.println(myCAN.cell3Voltage);
+  MySerial.println("Cell 4:");
+  MySerial.println(myCAN.cell4Voltage);
+
+}
+
+
 
 
 void setup() {
@@ -57,15 +93,7 @@ void setup() {
   }
   MySerial.println(F("MAX6675 OK"));
 
-  // this is already done within the begin function of battery monitor
-  pinMode(Battery_Monitor_Enable, OUTPUT);
-  digitalWrite(Battery_Monitor_Enable, LOW);
-
-  delay(5000);
-
-  digitalWrite(Battery_Monitor_Enable, HIGH);
-
-  delay(100);
+  
 
   /* start BQ76920 */
   int result = myBQ76920.begin(-1, Battery_Monitor_Enable);
@@ -79,6 +107,10 @@ void setup() {
     MySerial.println("Battery Monitor Initialization Failed");
   }
 
+  /* start CAN */
+
+  myCAN.begin();
+
   // setup hardware timer to send data in 50Hz pace
   //#if defined(TIM1)
   //  TIM_TypeDef *Instance = TIM1;
@@ -88,10 +120,10 @@ void setup() {
   //  HardwareTimer *SendTimer = new HardwareTimer(Instance);
   //  SendTimer->setOverflow(50, HERTZ_FORMAT); // 50 Hz
   //#if ( STM32_CORE_VERSION_MAJOR < 2 )
-  //  SendTimer->attachInterrupt(1, SendData);
+  //  SendTimer->attachInterrupt(1, [](){ myCAN.sendData(); });
   //  SendTimer->setMode(1, TIMER_OUTPUT_COMPARE);
   //#else //2.0 forward
-  //  SendTimer->attachInterrupt(SendData);
+  //  SendTimer->attachInterrupt([](){ myCAN.sendData(); }); // using a lambda function
   //#endif
   //SendTimer->resume();
   
@@ -99,7 +131,7 @@ void setup() {
 
 
 void loop() {
-  MySerial.println("Still running...");
+  MySerial.println("\nPMS Data:");
   
 
   myMAX31855.getError(); // i made the error checker into a function to clean up the main
@@ -108,30 +140,31 @@ void loop() {
   MySerial.print(F("Thermocouple: "));
   MySerial.println(myMAX31855.getTemperature(rawData));
 
-  MySerial.print(F("Current: "));
-  MySerial.println(myACS37002.readCurrent());
+  // MySerial.print(F("Current: "));
+  // MySerial.println(myACS37002.readCurrent());
 
-  // this is the stuff i got from chat to read an analog voltage
-  int adcVout = analogRead(Current_Sense_Vout);
-  int adcVref = analogRead(Current_Sense_Vref);
 
-  float vout = adcVout * (3.3 / 4095.0);
-  float vref = adcVref * (3.3 / 4095.0);   
+  // enabling battery monitor dont ask
+  pinMode(Battery_Monitor_Enable, OUTPUT);
+  digitalWrite(Battery_Monitor_Enable, LOW);
+  delay(10);   // wait 5 ms for device to receive boot signal (datasheet: max. 2 ms)
+  digitalWrite(Battery_Monitor_Enable,HIGH);
+  delay(10);   // wait 5 ms for device to receive boot signal (datasheet: max. 2 ms)
+  digitalWrite(Battery_Monitor_Enable,LOW);
+  delay(10);  // wait for device to boot up completely (datasheet: max. 10 ms)
 
-  float current = (vout - vref) / 0.040;
 
-  MySerial.print(F("Current: "));
-  MySerial.println(current);
 
   //the class has its own array of every individual cells' voltage so this function 
   //updates the voltages for the array and battery pack voltage
   myBQ76920.updateVoltages();
 
+
   //just reads the value and prints it
   long batteryVoltage = myBQ76920.getBatteryVoltage();
-  MySerial.print("Battery Voltage mV: ");
+  MySerial.print("Battery Voltage V: ");
   MySerial.println(myBQ76920.getBatteryVoltage() / 1000.0f);
-  
+
   // prints cell voltages
   for(int i = 1; i <= 4; i++)
   {
@@ -141,15 +174,16 @@ void loop() {
     MySerial.println(myBQ76920.getCellVoltage(i) / 1000.0f);
   }
 
-  // can main code has been commented out so i could test current sensor
-  // CAN stuff is in the lib folder under CAN with my self created .h and .cpp file
+  
 
-  // CAN Stuff 
-  //while (Can.read(myCAN.CAN_inMsg) ) 
-  //{
-  //  myCAN.readCanMessage();
-  //}
+  // CAN sending
+  updateCANMessages(myMAX31855.getTemperature(rawData),myBQ76920.getCellVoltage(1),myBQ76920.getCellVoltage(2),myBQ76920.getCellVoltage(3),myBQ76920.getCellVoltage(4));
+  printUpdatedCAN();
+  myCAN.sendData();
 
-  delay(5000);
+  
+
+
+  delay(1000);
 
 }
